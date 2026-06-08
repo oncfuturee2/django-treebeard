@@ -262,10 +262,12 @@ class Node(models.Model):
             The previous node's sibling, or None if it was the leftmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx > 0:
-            return self.get_siblings().get(pk=ids[idx - 1])
+        # Default implementation uses queryset ordering for efficiency
+        siblings = list(self.get_siblings())
+        for i, sibling in enumerate(siblings):
+            if sibling.pk == self.pk and i > 0:
+                return siblings[i - 1]
+        return None
 
     def get_next_sibling(self):
         """
@@ -274,10 +276,12 @@ class Node(models.Model):
             The next node's sibling, or None if it was the rightmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx < len(ids) - 1:
-            return self.get_siblings().get(pk=ids[idx + 1])
+        # Default implementation uses queryset ordering for efficiency
+        siblings = list(self.get_siblings())
+        for i, sibling in enumerate(siblings):
+            if sibling.pk == self.pk and i < len(siblings) - 1:
+                return siblings[i + 1]
+        return None
 
     def is_sibling_of(self, node):
         """

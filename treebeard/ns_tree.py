@@ -456,6 +456,30 @@ class NS_Node(Node):
             return self.get_root_nodes()
         return self.get_parent(True).get_children()
 
+    def get_prev_sibling(self):
+        """
+        :returns: The previous node's sibling, or None if it was the leftmost
+            sibling.
+        """
+        if self.lft == 1:
+            # Root node: find previous root by tree_id
+            return self.get_siblings().filter(tree_id__lt=self.tree_id).last()
+        else:
+            # Non-root node: find previous sibling by lft
+            return self.get_siblings().filter(lft__lt=self.lft).last()
+
+    def get_next_sibling(self):
+        """
+        :returns: The next node's sibling, or None if it was the rightmost
+            sibling.
+        """
+        if self.lft == 1:
+            # Root node: find next root by tree_id
+            return self.get_siblings().filter(tree_id__gt=self.tree_id).first()
+        else:
+            # Non-root node: find next sibling by lft
+            return self.get_siblings().filter(lft__gt=self.lft).first()
+
     @classmethod
     def dump_bulk(cls, parent=None, keep_ids=True):
         """Dumps a tree branch to a python data structure."""

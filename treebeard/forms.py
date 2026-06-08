@@ -63,8 +63,10 @@ class MoveNodeForm(forms.ModelForm):
 
     __position_choices_unsorted = (
         ("first-child", _("First child of")),
+        ("last-child", _("Last child of")),
         ("left", _("Before")),
         ("right", _("After")),
+        ("last-sibling", _("Last sibling of")),
     )
 
     treebeard_position = forms.ChoiceField(required=True, label=_("Position"))
@@ -80,16 +82,22 @@ class MoveNodeForm(forms.ModelForm):
             position = "sorted-child"
             ref_node = instance.get_parent()
         else:
+            parent = None if instance.is_root() else instance.get_parent()
             prev_sibling = instance.get_prev_sibling()
-            if prev_sibling:
+            next_sibling = instance.get_next_sibling()
+            if prev_sibling and next_sibling is None:
+                if parent is None:
+                    position = "last-sibling"
+                    ref_node = instance.get_first_sibling()
+                else:
+                    position = "last-child"
+                    ref_node = parent
+            elif prev_sibling:
                 position = "right"
                 ref_node = prev_sibling
             else:
                 position = "first-child"
-                if instance.is_root():
-                    ref_node = None
-                else:
-                    ref_node = instance.get_parent()
+                ref_node = parent
         return {"treebeard_ref_node": ref_node, "treebeard_position": position}
 
     def _set_ref_model_queryset(self, opts, instance):
@@ -145,6 +153,20 @@ class MoveNodeForm(forms.ModelForm):
 
         self._set_ref_model_queryset(opts, instance)
 
+    def _get_root_move_target(self, position_type):
+        if self.is_sorted:
+            root_position = "sorted-sibling"
+        else:
+            root_position = {
+                "first-child": "first-sibling",
+                "last-child": "last-sibling",
+            }.get(position_type, position_type)
+
+        root_nodes = self._meta.model.get_root_nodes().exclude(pk=self.instance.pk)
+        if root_position in {"first-sibling", "left", "sorted-sibling"}:
+            return root_nodes.first(), root_position
+        return root_nodes.last(), root_position
+
     def save(self, commit=True):
         """
         Saves the model form.
@@ -180,8 +202,9 @@ class MoveNodeForm(forms.ModelForm):
             if reference_node:
                 self.instance.move(reference_node, pos=position_type)
             else:
-                pos = "sorted-sibling" if self.is_sorted else "first-sibling"
-                self.instance.move(self._meta.model.get_first_root_node(), pos)
+                root_target, root_position = self._get_root_move_target(position_type)
+                if root_target:
+                    self.instance.move(root_target, pos=root_position)
         # Reload the instance
         self.instance.refresh_from_db()
         super().save(commit=commit)

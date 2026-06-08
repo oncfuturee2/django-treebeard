@@ -3979,7 +3979,7 @@ class TestMoveNodeForm:
         form = form_class(instance=node)
         assert ["desc", "treebeard_position", "treebeard_ref_node"] == list(form.base_fields.keys())
         got = [choice[0] for choice in form.fields["treebeard_position"].choices]
-        assert ["first-child", "left", "right"] == got
+        assert ["first-child", "last-child", "left", "right", "last-sibling"] == got
         nodes = self._get_nodes_list(safe_parent_nodes)
         self._assert_nodes_in_choices(form, nodes)
 
@@ -4158,6 +4158,20 @@ class TestForm(TestNonEmptyTree):
             "treebeard_ref_node": model.objects.get(desc="23"),
         }
 
+        instance_last_child = model.objects.get(desc="24")
+        form = form_class(instance=instance_last_child)
+        assert form._get_initial(instance_last_child) == {
+            "treebeard_position": "last-child",
+            "treebeard_ref_node": model.objects.get(desc="2"),
+        }
+
+        instance_last_root = model.objects.get(desc="4")
+        form = form_class(instance=instance_last_root)
+        assert form._get_initial(instance_last_root) == {
+            "treebeard_position": "last-sibling",
+            "treebeard_ref_node": model.objects.get(desc="1"),
+        }
+
     def test_save_edit(self, model):
         instance_parent = model.objects.get(desc="1")
         original_count = model.objects.count()
@@ -4195,6 +4209,38 @@ class TestForm(TestNonEmptyTree):
         assert restored_instance.get_depth() == 1
         assert restored_instance.is_root()
         assert restored_instance.is_leaf()
+
+    def test_save_edit_last_child(self, model):
+        instance = model.objects.get(desc="1")
+        form_class = movenodeform_factory(model)
+        form = form_class(
+            instance=instance,
+            data={
+                "treebeard_position": "last-child",
+                "treebeard_ref_node": model.objects.get(desc="2").pk,
+                "desc": instance.desc,
+            },
+        )
+        assert form.is_valid()
+        saved_instance = form.save()
+        assert saved_instance.get_parent() == model.objects.get(desc="2")
+        assert list(saved_instance.get_siblings().values_list("desc", flat=True))[-1] == saved_instance.desc
+
+    def test_save_edit_last_sibling_root(self, model):
+        instance = model.objects.get(desc="1")
+        form_class = movenodeform_factory(model)
+        form = form_class(
+            instance=instance,
+            data={
+                "treebeard_position": "last-sibling",
+                "treebeard_ref_node": "",
+                "desc": instance.desc,
+            },
+        )
+        assert form.is_valid()
+        saved_instance = form.save()
+        assert saved_instance.is_root()
+        assert list(model.get_root_nodes().values_list("desc", flat=True)) == ["2", "3", "4", "1"]
 
     def test_save_new(self, model):
         original_count = model.objects.all().count()

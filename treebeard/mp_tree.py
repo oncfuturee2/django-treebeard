@@ -842,13 +842,6 @@ class MP_Node(Node):
             .order_by("path")
         )
 
-    def get_next_sibling(self):
-        """
-        :returns: The next node's sibling, or None if it was the rightmost
-            sibling.
-        """
-        return self.get_siblings().filter(path__gt=self.path).first()
-
     def get_descendants(self, include_self=False):
         """
         :returns: A queryset of all the node's descendants as DFS, doesn't
@@ -859,13 +852,6 @@ class MP_Node(Node):
         if self.is_leaf():
             return self.tree_model().objects.none()
         return self.__class__.get_tree(self).exclude(pk=self.pk)
-
-    def get_prev_sibling(self):
-        """
-        :returns: The previous node's sibling, or None if it was the leftmost
-            sibling.
-        """
-        return self.get_siblings().filter(path__lt=self.path).last()
 
     def get_children_count(self):
         """

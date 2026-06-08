@@ -5,6 +5,7 @@ import warnings
 from contextlib import suppress
 from functools import cache, reduce
 
+from django.core.exceptions import FieldDoesNotExist
 from django.db import models, transaction
 from django.db.models import Q
 
@@ -255,6 +256,55 @@ class Node(models.Model):
         """
         return self.get_siblings().last()
 
+    def _get_adjacent_sibling_by_index(self, siblings, direction):
+        ids = list(siblings.values_list("pk", flat=True))
+        idx = ids.index(self.pk)
+        if direction == "prev":
+            if idx > 0:
+                return siblings.get(pk=ids[idx - 1])
+            return None
+        if idx < len(ids) - 1:
+            return siblings.get(pk=ids[idx + 1])
+        return None
+
+    def _get_ordered_sibling_queryset(self, direction):
+        siblings = self.get_siblings()
+        order_by = siblings.query.order_by or self.__class__._meta.ordering
+        if not order_by:
+            return siblings, None
+
+        filters = []
+        prefix_fields = []
+        for order_field in order_by:
+            if not isinstance(order_field, str) or order_field == "?":
+                return siblings, None
+
+            comparator = "gt" if direction == "next" else "lt"
+            if order_field.startswith("-"):
+                order_field = order_field[1:]
+                comparator = "lt" if direction == "next" else "gt"
+
+            try:
+                model_field = self._meta.get_field(order_field)
+            except FieldDoesNotExist:
+                return siblings, None
+
+            attr_name = model_field.attname if model_field.is_relation else order_field
+            current_value = getattr(self, attr_name)
+            if current_value is None:
+                if model_field.is_relation:
+                    prefix_fields.append((order_field, current_value))
+                    continue
+                return siblings, None
+
+            prefix_filters = [Q(**{field_name: value}) for field_name, value in prefix_fields]
+            filters.append(Q(*prefix_filters, Q(**{f"{order_field}__{comparator}": current_value})))
+            prefix_fields.append((order_field, current_value))
+
+        if not filters:
+            return siblings, None
+        return siblings, siblings.filter(reduce(operator.or_, filters))
+
     def get_prev_sibling(self):
         """
         :returns:
@@ -262,10 +312,10 @@ class Node(models.Model):
             The previous node's sibling, or None if it was the leftmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx > 0:
-            return self.get_siblings().get(pk=ids[idx - 1])
+        siblings, queryset = self._get_ordered_sibling_queryset("prev")
+        if queryset is None:
+            return self._get_adjacent_sibling_by_index(siblings, "prev")
+        return queryset.last()
 
     def get_next_sibling(self):
         """
@@ -274,10 +324,10 @@ class Node(models.Model):
             The next node's sibling, or None if it was the rightmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx < len(ids) - 1:
-            return self.get_siblings().get(pk=ids[idx + 1])
+        siblings, queryset = self._get_ordered_sibling_queryset("next")
+        if queryset is None:
+            return self._get_adjacent_sibling_by_index(siblings, "next")
+        return queryset.first()
 
     def is_sibling_of(self, node):
         """

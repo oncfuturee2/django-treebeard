@@ -42,8 +42,8 @@ class MoveNodeForm(forms.ModelForm):
                 will be used to move the node. These can be:
 
                 - For sorted trees: ``Child of`` and ``Sibling of``
-                - For unsorted trees: ``First child of``, ``Before`` and
-                  ``After``
+                - For unsorted trees: ``First child of``, ``Last child of``,
+                  ``Before``, ``After`` and ``Last sibling of``
 
     .. warning::
 
@@ -63,8 +63,10 @@ class MoveNodeForm(forms.ModelForm):
 
     __position_choices_unsorted = (
         ("first-child", _("First child of")),
+        ("last-child", _("Last child of")),
         ("left", _("Before")),
         ("right", _("After")),
+        ("last-sibling", _("Last sibling of")),
     )
 
     treebeard_position = forms.ChoiceField(required=True, label=_("Position"))
@@ -81,7 +83,15 @@ class MoveNodeForm(forms.ModelForm):
             ref_node = instance.get_parent()
         else:
             prev_sibling = instance.get_prev_sibling()
-            if prev_sibling:
+            next_sibling = instance.get_next_sibling()
+            if not next_sibling and prev_sibling:
+                if instance.is_root():
+                    position = "last-sibling"
+                    ref_node = instance.get_first_sibling()
+                else:
+                    position = "last-child"
+                    ref_node = instance.get_parent()
+            elif prev_sibling:
                 position = "right"
                 ref_node = prev_sibling
             else:

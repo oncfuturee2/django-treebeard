@@ -266,8 +266,12 @@ class MP_AddChildHandler:
         if self.node_cls.node_order_by and not node.is_leaf():
             # there are child nodes and node_order_by has been set
             # delegate sorted insertion to add_sibling
-            self.node.numchild += 1
-            return node.get_last_child().add_sibling("sorted-sibling", **self.kwargs)
+            # Let add_sibling handle the numchild increment, but update our in-memory object after
+            newobj = node.get_last_child().add_sibling("sorted-sibling", **self.kwargs)
+            # Refresh the parent node from database to get the updated numchild
+            node.refresh_from_db()
+            self.node.numchild = node.numchild
+            return newobj
 
         if len(self.kwargs) == 1 and "instance" in self.kwargs:
             # adding the passed (unsaved) instance to the tree

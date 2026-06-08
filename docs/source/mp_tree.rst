@@ -1,0 +1,321 @@
+Materialized Path trees
+=======================
+
+.. module:: treebeard.mp_tree
+
+This is an efficient implementation of Materialized Path
+trees for Django, as described by `Vadim Tropashko`_ in `SQL Design
+Patterns`_. Materialized Path is probably the fastest way of working with
+trees in SQL without the need of extra work in the database, like Oracle's
+``CONNECT BY`` or sprocs and triggers for nested intervals.
+
+In a materialized path approach, every node in the tree will have a
+:attr:`~MP_Node.path` attribute, where the full path from the root
+to the node will be stored. This has the advantage of needing very simple
+and fast queries, at the risk of inconsistency because of the
+denormalization of ``parent``/``child`` foreign keys. This can be prevented
+with transactions.
+
+``django-treebeard`` uses a particular approach: every step in the path has
+a fixed width and has no separators. This makes queries predictable and
+faster at the cost of using more characters to store a step. To address
+this problem, every step number is encoded.
+
+Also, two extra fields are stored in every node:
+:attr:`~MP_Node.depth` and :attr:`~MP_Node.numchild`.
+This makes the read operations faster, at the cost of a little more
+maintenance on tree updates/inserts/deletes. Don't worry, even with these
+extra steps, materialized path is more efficient than other approaches.
+
+.. warning::
+
+   As with all tree implementations, please be aware of the
+   :doc:`caveats`.
+
+.. note::
+
+   The materialized path approach makes heavy use of ``LIKE`` in your
+   database, with clauses like ``WHERE path LIKE '002003%'``. If you think
+   that ``LIKE`` is too slow, you're right, but in this case the
+   :attr:`~MP_Node.path` field is indexed in the database, and all
+   ``LIKE`` clauses that don't **start** with a ``%`` character will use
+   the index. This is what makes the materialized path approach so fast.
+
+.. inheritance-diagram:: MP_Node
+.. autoclass:: MP_Node
+  :show-inheritance:
+
+  .. warning::
+
+     Do not change the values of :attr:`path`, :attr:`depth` or
+     :attr:`numchild` directly: use one of the included methods instead.
+     Consider these values *read-only*.
+
+  .. warning::
+
+     Do not change the values of the :attr:`steplen`, :attr:`alphabet` or
+     :attr:`node_order_by` after saving your first object. Doing so will
+     corrupt the tree.
+
+  .. warning::
+
+     If you need to define your own
+     :py:class:`~django.db.models.Manager` class,
+     you'll need to subclass
+     :py:class:`~MP_NodeManager`.
+
+     Also, if in your manager you need to change the default
+     queryset handler, you'll need to subclass
+     :py:class:`~MP_NodeQuerySet`.
+
+
+  Example:
+
+  .. code-block:: python
+
+     class SortedNode(MP_Node):
+        node_order_by = ['numval', 'strval']
+
+        numval = models.IntegerField()
+        strval = models.CharField(max_length=255)
+
+  Read the API reference of :class:`treebeard.models.Node` for info on methods
+  available in this class, or read the following section for methods with
+  particular arguments or exceptions.
+
+  .. attribute:: steplen
+
+     Attribute that defines the length of each step in the :attr:`path` of
+     a node.  The default value of *4* allows a maximum of
+     *1679615* children per node. Increase this value if you plan to store
+     large trees (a ``steplen`` of *5* allows more than *60M* children per
+     node). Note that increasing this value, while increasing the number of
+     children per node, will decrease the max :attr:`depth` of the tree (by
+     default: *63*). To increase the max :attr:`depth`, increase the
+     max_length attribute of the :attr:`path` field in your model.
+
+  .. attribute:: alphabet
+
+     Attribute: the alphabet that will be used in base conversions
+     when encoding the path steps into strings. The default value,
+     ``0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ`` is the most optimal possible
+     value that is portable between the supported databases (which means:
+     their default collation will order the :attr:`path` field correctly).
+
+     .. note::
+
+        In case you know what you are doing, there is a test that is
+        disabled by default that will attempt to suggest an optimal default alphabet
+        in your enviroment. To run the test you must enable the
+        :envvar:`TREEBEARD_TEST_ALPHABET` enviroment variable:
+
+        .. code-block:: console
+
+          $ TREEBEARD_TEST_ALPHABET=1 py.test -k test_alphabet
+
+        In OS X Mavericks, good readable values for the three supported
+        databases in their *default* configuration:
+
+         ================ ================ ====
+         Database         Optimal Alphabet Base
+         ================ ================ ====
+         MySQL 5.6.17     0-9A-Z           36
+         PostgreSQL 9.3.4 0-9A-Za-z        62
+         Sqlite3          0-9A-Z           36
+         ================ ================ ====
+
+        The default value is MySQL's since it will work for all DBs,
+        but when working with a better database, changing the
+        :attr:`alphabet` value is recommended in order to increase the
+        density of the paths.
+
+        For an even better approach, change the collation of the
+        :attr:`path` column in the database to handle raw ASCII, and
+        use the printable ASCII characters (0x20 to 0x7E) as the
+        :attr:`alphabet`.
+
+         .. warning::
+
+            If you use a custom alphabet, you must ensure that the order of characters in the alphabet
+            matches the sort order of your database collation.
+
+            Also note that PostgreSQL relies on the collation provided by the underlying
+            operating system, yielding inconsistent results on different systems 
+            if both upper and lower case characters are included in the alphabet. 
+            See https://github.com/PostgresApp/PostgresApp/issues/216
+            and https://dba.stackexchange.com/questions/106964/why-is-my-postgresql-order-by-case-insensitive.
+
+
+  .. attribute:: node_order_by
+
+     Attribute: a list of model fields that will be used for node
+     ordering. When enabled, all tree operations will assume this ordering.
+     This takes precedence over drag and drop ordering in the Django admin.
+
+     Example:
+
+     .. code-block:: python
+
+       node_order_by = ['field1', 'field2', 'field3']
+
+     .. warning::
+         ``node_order_by`` values are used to determine correct node ordering *before*
+         an object is inserted/moved. This means any fields that
+         are auto-populated at a database level, e.g., ``AutoField()``, or ``DateTimeField(auto_now=True)``
+         will be ignored for the purpose of ordering if a value isn't provided manually.
+
+
+  .. attribute:: path
+
+     ``CharField``, stores the full materialized path for each node. The
+     default value of it's max_length, *255*, is the max efficient and
+     portable value for a ``varchar``. Increase it to allow deeper trees (max
+     depth by default: *63*)
+
+     .. note::
+
+       `django-treebeard` uses Django's abstract model inheritance, so
+       to change the ``max_length`` value of the path in your model, you
+       have to redeclare the path field in your model:
+
+       .. code-block:: python
+
+         class MyNodeModel(MP_Node):
+             path = models.CharField(max_length=1024, unique=True)
+
+     .. note::
+
+       For performance, and if your database allows it, you can safely
+       define the path column as ASCII (not utf-8/unicode/iso8859-1/etc) to
+       keep the index smaller (and faster). Also note that some databases
+       (mysql) have a small index size limit. InnoDB for instance has a
+       limit of 765 bytes per index, so that would be the limit if your path
+       is ASCII encoded. If your path column in InnoDB is using unicode,
+       the index limit will be 255 characters since in MySQL's indexes,
+       unicode means 3 bytes per character.
+
+     .. note::
+
+        ``django-treebeard`` uses `numconv`_ for path encoding.
+
+
+  .. attribute:: depth
+
+     ``PositiveIntegerField``, depth of a node in the tree. A root node
+     has a depth of *1*.
+
+  .. attribute:: numchild
+
+     ``PositiveIntegerField``, the number of children of the node.
+
+  .. automethod:: add_root
+
+     See: :meth:`treebeard.models.Node.add_root`
+
+  .. automethod:: add_child
+
+     See: :meth:`treebeard.models.Node.add_child`
+
+  .. automethod:: add_sibling
+
+     See: :meth:`treebeard.models.Node.add_sibling`
+
+  .. automethod:: move
+
+     See: :meth:`treebeard.models.Node.move`
+
+  .. automethod:: get_tree
+
+     See: :meth:`treebeard.models.Node.get_tree`
+
+     .. note::
+
+        This method returns a queryset.
+
+  .. automethod:: find_problems
+
+     .. note::
+
+        A node won't appear in more than one list, even when it exhibits
+        more than one problem. This method stops checking a node when it
+        finds a problem and continues to the next node.
+
+     .. note::
+
+        Problems 1, 2 and 3 can't be solved automatically.
+
+     Example:
+
+     .. code-block:: python
+
+        MyNodeModel.find_problems()
+
+  .. automethod:: fix_tree
+
+     Example:
+
+     .. code-block:: python
+
+        MyNodeModel.fix_tree()
+
+  .. automethod:: load_bulk
+
+.. autoclass:: MP_NodeManager
+  :show-inheritance:
+
+.. autoclass:: MP_NodeQuerySet
+  :show-inheritance:
+
+Signals
+-------
+
+The :mod:`treebeard.mp_tree` module defines several signals that are sent when
+bulk updates are made to the tree. Along with the standard Django ``post_save``
+and ``post_delete`` signals that track changes to individual node instances,
+these can be used to keep external data stores such as search indexes in sync
+with the tree.
+
+.. attribute:: path_updated
+
+   Sent after a bulk update has been performed to update the paths of a node
+   and its descendants, with the following arguments:
+
+   ``sender``
+      The model class where the update occurred.
+
+   ``old_path``
+      The old path of the topmost node before the update. The update operation
+      applies to all nodes whose path starts with this value.
+
+   ``new_path``
+      The new path of the topmost node after the update. All nodes in the
+      update operation have had the prefix ``old_path`` replaced with
+      ``new_path``. Note that if these paths are of different lengths, the
+      depth of the nodes has also been updated accordingly.
+
+   ``using``
+      The database alias being used.
+
+.. attribute:: nodes_deleted
+
+   Sent after one or more nodes are deleted, with the following arguments:
+
+   ``sender``
+      The model class where the deletion occurred.
+
+   ``pks_to_remove``
+      A list of primary keys of leaf nodes that were deleted. These are passed
+      as a separate list to the non-leaf nodes as it is more efficient to
+      delete these by primary key rather than by path.
+
+   ``paths_to_remove``
+      A list of paths of non-leaf nodes that were deleted (along with their
+      descendants). All nodes with a path that starts with any of these values
+      were deleted.
+
+   ``using``
+      The database alias being used.
+
+.. _`Vadim Tropashko`: http://vadimtropashko.wordpress.com/
+.. _`SQL Design Patterns`: http://www.rampant-books.com/book_2006_1_sql_coding_styles.htm
+.. _numconv: https://tabo.pe/projects/numconv/

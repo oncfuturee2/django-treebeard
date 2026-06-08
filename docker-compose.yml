@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DATABASE_USER_POSTGRES:-root}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-treebeard}
+      POSTGRES_DB: treebeard
+    ports:
+      - "${DATABASE_PORT_POSTGRES:-5432}:5432"
+    volumes:
+      - ./docker/init-postgres.sql:/docker-entrypoint-initdb.d/init-ltree.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER_POSTGRES:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: "no"
+
+  mysql:
+    image: mysql:9.5
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD:-treebeard}
+      MYSQL_DATABASE: treebeard
+    ports:
+      - "${DATABASE_PORT_MYSQL:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: "no"
+
+  mariadb:
+    image: mariadb:10.6
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD:-treebeard}
+      MYSQL_DATABASE: treebeard
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: "no"
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      SA_PASSWORD: "Password12!"
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+    ports:
+      - "${DATABASE_PORT_MSSQL:-1433}:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'Password12!' -Q 'SELECT 1' -b -C || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: "no"

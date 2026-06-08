@@ -266,7 +266,7 @@ class MP_AddChildHandler:
         if self.node_cls.node_order_by and not node.is_leaf():
             # there are child nodes and node_order_by has been set
             # delegate sorted insertion to add_sibling
-            self.node.numchild += 1
+            self.node.numchild = node.numchild + 1
             return node.get_last_child().add_sibling("sorted-sibling", **self.kwargs)
 
         if len(self.kwargs) == 1 and "instance" in self.kwargs:

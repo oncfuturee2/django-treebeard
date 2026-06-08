@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: treebeard-postgres
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: treebeard
+      POSTGRES_DB: treebeard
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-ltree.sql:/docker-entrypoint-initdb.d/init-ltree.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d treebeard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:9.5
+    container_name: treebeard-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: treebeard
+      MYSQL_DATABASE: treebeard
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ptreebeard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    container_name: treebeard-mssql
+    environment:
+      SA_PASSWORD: Password12!
+      ACCEPT_EULA: Y
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Password12! -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  mysql-data:
+  mssql-data:

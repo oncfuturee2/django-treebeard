@@ -98,6 +98,10 @@ class NS_Node(Node):
 
     objects = NS_NodeManager()
 
+    @property
+    def _sibling_order_field(self):
+        return "tree_id" if self.lft == 1 else "lft"
+
     _cached_attributes = (
         *Node._cached_attributes,
         "_cached_parent_obj",

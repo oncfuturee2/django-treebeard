@@ -22,13 +22,14 @@ class AL_NodeManager(models.Manager):
 
 
 class AL_Node(Node):
-    """Abstract model to create your own Adjacency List Trees."""
+    """Abstract model to create your Adjacency List Trees."""
 
     objects = AL_NodeManager()
     node_order_by = None
 
     TREEBEARD_IDENTIFYING_FIELD = "parent"
     MOVENODE_FORM_EXCLUDED_FIELDS = ("sib_order", "parent")
+    _sibling_order_field = "sib_order"
 
     _cached_attributes = (
         *Node._cached_attributes,
@@ -252,12 +253,6 @@ class AL_Node(Node):
         if self.parent_id:
             return self.tree_model().objects.filter(parent_id=self.parent_id)
         return self.__class__.get_root_nodes()
-
-    def get_prev_sibling(self):
-        return self.get_siblings().filter(sib_order__lt=self.sib_order).last()
-
-    def get_next_sibling(self):
-        return self.get_siblings().filter(sib_order__gt=self.sib_order).first()
 
     @transaction.atomic
     def add_sibling(self, pos=None, **kwargs):

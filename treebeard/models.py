@@ -22,6 +22,8 @@ class Node(models.Model):
     MOVENODE_FORM_EXCLUDED_FIELDS = ()
     _cached_attributes = ()
 
+    _sibling_order_field = None
+
     @classmethod
     def add_root(cls, **kwargs):  # pragma: no cover
         """
@@ -262,10 +264,15 @@ class Node(models.Model):
             The previous node's sibling, or None if it was the leftmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx > 0:
-            return self.get_siblings().get(pk=ids[idx - 1])
+        if not hasattr(self, '_sibling_order_field') or self._sibling_order_field is None:
+            ids = list(self.get_siblings().values_list("pk", flat=True))
+            idx = ids.index(self.pk)
+            if idx > 0:
+                return self.get_siblings().get(pk=ids[idx - 1])
+        else:
+            order_value = getattr(self, self._sibling_order_field)
+            lookup = {f"{self._sibling_order_field}__lt": order_value}
+            return self.get_siblings().filter(**lookup).last()
 
     def get_next_sibling(self):
         """
@@ -274,10 +281,15 @@ class Node(models.Model):
             The next node's sibling, or None if it was the rightmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
-        idx = ids.index(self.pk)
-        if idx < len(ids) - 1:
-            return self.get_siblings().get(pk=ids[idx + 1])
+        if not hasattr(self, '_sibling_order_field') or self._sibling_order_field is None:
+            ids = list(self.get_siblings().values_list("pk", flat=True))
+            idx = ids.index(self.pk)
+            if idx < len(ids) - 1:
+                return self.get_siblings().get(pk=ids[idx + 1])
+        else:
+            order_value = getattr(self, self._sibling_order_field)
+            lookup = {f"{self._sibling_order_field}__gt": order_value}
+            return self.get_siblings().filter(**lookup).first()
 
     def is_sibling_of(self, node):
         """

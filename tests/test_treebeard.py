@@ -3979,7 +3979,7 @@ class TestMoveNodeForm:
         form = form_class(instance=node)
         assert ["desc", "treebeard_position", "treebeard_ref_node"] == list(form.base_fields.keys())
         got = [choice[0] for choice in form.fields["treebeard_position"].choices]
-        assert ["first-child", "left", "right"] == got
+        assert ["first-child", "left", "right", "last-child", "last-sibling"] == got
         nodes = self._get_nodes_list(safe_parent_nodes)
         self._assert_nodes_in_choices(form, nodes)
 
@@ -4156,6 +4156,20 @@ class TestForm(TestNonEmptyTree):
         assert form._get_initial(instance_grandchild) == {
             "treebeard_position": "first-child",
             "treebeard_ref_node": model.objects.get(desc="23"),
+        }
+
+        instance_last_child = model.objects.get(desc="24")
+        form = form_class(instance=instance_last_child)
+        assert form._get_initial(instance_last_child) == {
+            "treebeard_position": "last-child",
+            "treebeard_ref_node": model.objects.get(desc="2"),
+        }
+
+        instance_last_root = model.objects.get(desc="4")
+        form = form_class(instance=instance_last_root)
+        assert form._get_initial(instance_last_root) == {
+            "treebeard_position": "last-sibling",
+            "treebeard_ref_node": None,
         }
 
     def test_save_edit(self, model):

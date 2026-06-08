@@ -65,6 +65,8 @@ class MoveNodeForm(forms.ModelForm):
         ("first-child", _("First child of")),
         ("left", _("Before")),
         ("right", _("After")),
+        ("last-child", _("Last child of")),
+        ("last-sibling", _("Last sibling of")),
     )
 
     treebeard_position = forms.ChoiceField(required=True, label=_("Position"))
@@ -81,7 +83,15 @@ class MoveNodeForm(forms.ModelForm):
             ref_node = instance.get_parent()
         else:
             prev_sibling = instance.get_prev_sibling()
-            if prev_sibling:
+            next_sibling = instance.get_next_sibling()
+            if prev_sibling and not next_sibling:
+                if instance.is_root():
+                    position = "last-sibling"
+                    ref_node = None
+                else:
+                    position = "last-child"
+                    ref_node = instance.get_parent()
+            elif prev_sibling:
                 position = "right"
                 ref_node = prev_sibling
             else:
@@ -175,13 +185,32 @@ class MoveNodeForm(forms.ModelForm):
                 self.instance.move(reference_node, pos=position_type)
             else:
                 self.instance = self._meta.model.add_root(instance=self.instance)
+                if not self.is_sorted:
+                    if position_type in ("first-child", "first-sibling", "left"):
+                        first_root = self._meta.model.get_first_root_node()
+                        if first_root and first_root.pk != self.instance.pk:
+                            self.instance.move(first_root, "first-sibling")
         else:
             self.instance.save()
             if reference_node:
                 self.instance.move(reference_node, pos=position_type)
             else:
-                pos = "sorted-sibling" if self.is_sorted else "first-sibling"
-                self.instance.move(self._meta.model.get_first_root_node(), pos)
+                if self.is_sorted:
+                    pos = "sorted-sibling"
+                else:
+                    if position_type in ("last-child", "last-sibling", "right"):
+                        pos = "last-sibling"
+                    else:
+                        pos = "first-sibling"
+                first_root = self._meta.model.get_first_root_node()
+                if first_root and first_root.pk != self.instance.pk:
+                    self.instance.move(first_root, pos)
+                elif first_root and first_root.pk == self.instance.pk and pos == "last-sibling":
+                    # If it is the first root and wants to be the last sibling
+                    self.instance.move(first_root, pos)
+                elif first_root and first_root.pk == self.instance.pk and pos == "first-sibling":
+                    # Already the first sibling
+                    pass
         # Reload the instance
         self.instance.refresh_from_db()
         super().save(commit=commit)

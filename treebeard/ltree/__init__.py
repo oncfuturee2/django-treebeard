@@ -542,13 +542,6 @@ class LT_Node(Node):
         """:returns: A queryset of all the node's children"""
         return self.tree_model().objects.filter(path__descendants=self.path, path__depth=len(self.path) + 1)
 
-    def get_next_sibling(self):
-        """
-        :returns: The next node's sibling, or None if it was the rightmost
-            sibling.
-        """
-        return self.get_siblings().filter(path__gt=self.path).first()
-
     def get_descendants(self, include_self=False):
         """
         :returns: A queryset of all the node's descendants as DFS, doesn't
@@ -558,13 +551,6 @@ class LT_Node(Node):
             return self.__class__.get_tree(self)
 
         return self.__class__.get_tree(self).exclude(pk=self.pk)
-
-    def get_prev_sibling(self):
-        """
-        :returns: The previous node's sibling, or None if it was the leftmost
-            sibling.
-        """
-        return self.get_siblings().filter(path__lt=self.path).last()
 
     def get_children_count(self):
         """

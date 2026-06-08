@@ -262,10 +262,22 @@ class Node(models.Model):
             The previous node's sibling, or None if it was the leftmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
+        qs = self.get_siblings()
+        if hasattr(self, 'path'):
+            return qs.filter(path__lt=self.path).last()
+        elif hasattr(self, 'lft'):
+            if self.is_root():
+                return qs.filter(tree_id__lt=self.tree_id).last()
+            else:
+                return qs.filter(lft__lt=self.lft).last()
+        elif hasattr(self, 'sib_order'):
+            return qs.filter(sib_order__lt=self.sib_order).last()
+        
+        # Fallback for unknown tree implementations
+        ids = list(qs.values_list("pk", flat=True))
         idx = ids.index(self.pk)
         if idx > 0:
-            return self.get_siblings().get(pk=ids[idx - 1])
+            return qs.get(pk=ids[idx - 1])
 
     def get_next_sibling(self):
         """
@@ -274,10 +286,22 @@ class Node(models.Model):
             The next node's sibling, or None if it was the rightmost
             sibling.
         """
-        ids = list(self.get_siblings().values_list("pk", flat=True))
+        qs = self.get_siblings()
+        if hasattr(self, 'path'):
+            return qs.filter(path__gt=self.path).first()
+        elif hasattr(self, 'lft'):
+            if self.is_root():
+                return qs.filter(tree_id__gt=self.tree_id).first()
+            else:
+                return qs.filter(lft__gt=self.lft).first()
+        elif hasattr(self, 'sib_order'):
+            return qs.filter(sib_order__gt=self.sib_order).first()
+        
+        # Fallback for unknown tree implementations
+        ids = list(qs.values_list("pk", flat=True))
         idx = ids.index(self.pk)
         if idx < len(ids) - 1:
-            return self.get_siblings().get(pk=ids[idx + 1])
+            return qs.get(pk=ids[idx + 1])
 
     def is_sibling_of(self, node):
         """

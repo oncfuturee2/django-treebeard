@@ -253,12 +253,6 @@ class AL_Node(Node):
             return self.tree_model().objects.filter(parent_id=self.parent_id)
         return self.__class__.get_root_nodes()
 
-    def get_prev_sibling(self):
-        return self.get_siblings().filter(sib_order__lt=self.sib_order).last()
-
-    def get_next_sibling(self):
-        return self.get_siblings().filter(sib_order__gt=self.sib_order).first()
-
     @transaction.atomic
     def add_sibling(self, pos=None, **kwargs):
         """Adds a new node as a sibling to the current node object."""

@@ -3979,7 +3979,7 @@ class TestMoveNodeForm:
         form = form_class(instance=node)
         assert ["desc", "treebeard_position", "treebeard_ref_node"] == list(form.base_fields.keys())
         got = [choice[0] for choice in form.fields["treebeard_position"].choices]
-        assert ["first-child", "left", "right"] == got
+        assert ["first-child", "last-child", "left", "right", "last-sibling"] == got
         nodes = self._get_nodes_list(safe_parent_nodes)
         self._assert_nodes_in_choices(form, nodes)
 

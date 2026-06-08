@@ -63,8 +63,10 @@ class MoveNodeForm(forms.ModelForm):
 
     __position_choices_unsorted = (
         ("first-child", _("First child of")),
+        ("last-child", _("Last child of")),
         ("left", _("Before")),
         ("right", _("After")),
+        ("last-sibling", _("Last sibling of")),
     )
 
     treebeard_position = forms.ChoiceField(required=True, label=_("Position"))
@@ -81,9 +83,14 @@ class MoveNodeForm(forms.ModelForm):
             ref_node = instance.get_parent()
         else:
             prev_sibling = instance.get_prev_sibling()
+            next_sibling = instance.get_next_sibling()
             if prev_sibling:
-                position = "right"
-                ref_node = prev_sibling
+                if next_sibling:
+                    position = "right"
+                    ref_node = prev_sibling
+                else:
+                    ref_node = instance.get_parent() if not instance.is_root() else None
+                    position = "last-child" if ref_node else "last-sibling"
             else:
                 position = "first-child"
                 if instance.is_root():
@@ -180,7 +187,10 @@ class MoveNodeForm(forms.ModelForm):
             if reference_node:
                 self.instance.move(reference_node, pos=position_type)
             else:
-                pos = "sorted-sibling" if self.is_sorted else "first-sibling"
+                if self.is_sorted:
+                    pos = "sorted-sibling"
+                else:
+                    pos = "last-sibling" if position_type == "last-sibling" else "first-sibling"
                 self.instance.move(self._meta.model.get_first_root_node(), pos)
         # Reload the instance
         self.instance.refresh_from_db()

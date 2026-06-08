@@ -63,8 +63,11 @@ class MoveNodeForm(forms.ModelForm):
 
     __position_choices_unsorted = (
         ("first-child", _("First child of")),
+        ("last-child", _("Last child of")),
+        ("first-sibling", _("First sibling of")),
         ("left", _("Before")),
         ("right", _("After")),
+        ("last-sibling", _("Last sibling of")),
     )
 
     treebeard_position = forms.ChoiceField(required=True, label=_("Position"))
@@ -81,15 +84,31 @@ class MoveNodeForm(forms.ModelForm):
             ref_node = instance.get_parent()
         else:
             prev_sibling = instance.get_prev_sibling()
+            next_sibling = instance.get_next_sibling()
             if prev_sibling:
-                position = "right"
-                ref_node = prev_sibling
-            else:
-                position = "first-child"
-                if instance.is_root():
-                    ref_node = None
+                if next_sibling:
+                    position = "right"
+                    ref_node = prev_sibling
                 else:
-                    ref_node = instance.get_parent()
+                    position = "last-sibling"
+                    ref_node = instance.get_prev_sibling() or instance
+            else:
+                if instance.is_root():
+                    if next_sibling:
+                        position = "first-sibling"
+                        ref_node = instance.get_first_sibling()
+                    else:
+                        position = "first-sibling"
+                        ref_node = None
+                else:
+                    parent = instance.get_parent()
+                    last_child = parent.get_last_child()
+                    if last_child == instance:
+                        position = "last-child"
+                        ref_node = parent
+                    else:
+                        position = "first-child"
+                        ref_node = parent
         return {"treebeard_ref_node": ref_node, "treebeard_position": position}
 
     def _set_ref_model_queryset(self, opts, instance):
